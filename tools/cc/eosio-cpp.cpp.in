@@ -87,6 +87,7 @@ namespace eosio { namespace cdt {
                   }
                }
                if (decl->isEosioTable() && abigen::is_eosio_contract(decl, get_abigen_ref().get_contract_name())) {
+                  // TODO: Check the base classes here to see if it inherits from kv_table
                   get_abigen_ref().add_struct(decl);
                   get_abigen_ref().add_table(decl);
                   for (auto field : decl->fields())
@@ -99,6 +100,21 @@ namespace eosio { namespace cdt {
                   get_abigen_ref().add_table(decl->getTemplateArgs()[0].getAsIntegral().getExtValue(),
                                           (clang::CXXRecordDecl*)((clang::RecordType*)decl->getTemplateArgs()[1].getAsType().getTypePtr())->getDecl());
                }
+
+               if ( decl->getName() == "index" ) {
+                  // decl->dump();
+                  get_abigen_ref().add_kv_index(decl);
+               }
+
+               if ( decl->getName() == "decay" ) {
+                  const auto templ_arg = decl->getTemplateArgs()[0].getAsType();
+                  #if 0
+                  std::cout << "=== " << templ_arg.getAsString() << std::endl;
+                  decl->dump();
+                  #endif
+               }
+               
+               // std::cout << decl->getNameAsString() << std::endl;
             }
          }
    };

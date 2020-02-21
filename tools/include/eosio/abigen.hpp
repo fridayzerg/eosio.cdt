@@ -36,6 +36,8 @@ using namespace eosio::cdt;
 using jsoncons::json;
 using jsoncons::ojson;
 
+#define DO_DEBUG false
+
 namespace eosio { namespace cdt {
    class abigen : public generation_utils {
       std::set<std::string> checked_actions;
@@ -179,6 +181,13 @@ namespace eosio { namespace cdt {
       }
 
       void add_struct( const clang::CXXRecordDecl* decl, const std::string& rname="" ) {
+         auto nme = decl->getName().str();
+         if (internal_types.count(nme)) {
+            return;
+         }
+
+         if (is_kv_table(decl)) return;
+
          abi_struct ret;
          if ( decl->getNumBases() == 1 ) {
             ret.base = get_type(decl->bases_begin()->getType());
@@ -202,7 +211,8 @@ namespace eosio { namespace cdt {
             ret.name = rname;
          else
             ret.name = decl->getName().str();
-         _abi.structs.insert(ret);
+
+         const auto res = _abi.structs.insert(ret);
       }
 
       void add_struct( const clang::CXXMethodDecl* decl ) {
@@ -210,6 +220,7 @@ namespace eosio { namespace cdt {
          new_struct.name = decl->getNameAsString();
          for (auto param : decl->parameters() ) {
             auto param_type = param->getType().getNonReferenceType().getUnqualifiedType();
+            std::cout << param_type.getAsString() << std::endl;
             new_struct.fields.push_back({param->getNameAsString(), get_type(param_type)});
             add_type(param_type);
          }
@@ -221,6 +232,11 @@ namespace eosio { namespace cdt {
       }
 
       void add_table( const clang::CXXRecordDecl* decl ) {
+         if (is_kv_table(decl)) {
+            add_kv_table(decl);
+            return;
+         }
+
          tables.insert(decl);
          abi_table t;
          t.type = decl->getNameAsString();
@@ -238,10 +254,54 @@ namespace eosio { namespace cdt {
       void add_table( uint64_t name, const clang::CXXRecordDecl* decl ) {
          if (!(decl->isEosioTable() && abigen::is_eosio_contract(decl, get_contract_name())))
             return;
+
          abi_table t;
          t.type = decl->getNameAsString();
          t.name = name_to_string(name);
          _abi.tables.insert(t);
+      }
+
+      void add_kv_table(const clang::CXXRecordDecl* const decl) {
+         clang::CXXRecordDecl* table_type;
+         std::string templ_name;
+
+         for (const auto& base : decl->bases()) {
+            if (const auto templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
+               const auto& templ_type = templ_base->getTemplateArgs()[0];
+               table_type = templ_type.getAsType().getTypePtr()->getAsCXXRecordDecl();
+               // TODO: how to handle non_unique
+               add_struct(table_type);
+
+               const auto templ_val = templ_base->getTemplateArgs()[1].getAsIntegral().getExtValue();
+               templ_name = name_to_string(templ_val);
+            }
+         }
+
+         abi_kv_table t;
+         t.type = table_type->getNameAsString();
+         t.name = templ_name;
+
+         for (const auto field : decl->fields()) {
+            std::string idx_type;
+            const auto qt = field->getType();
+            const auto index_type = get_template_argument(qt);
+            if (const auto elab_type = dyn_cast<clang::ElaboratedType>(index_type.getAsType().getTypePtr())) {
+               // This is the macro case
+               const auto decayed_type = elab_type->getNamedType();
+               if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
+                  const auto& decl_type = d->getArg(0);
+                  if (const auto dcl_type = dyn_cast<clang::DecltypeType>(decl_type.getAsType())) {
+                     idx_type = get_value_from_decltype(dcl_type);
+                  }
+               }
+            } else {
+               // This is the non-macro case
+               idx_type = get_type(index_type.getAsType());
+            }
+            t.indices.push_back({field->getNameAsString(), idx_type});
+         }
+
+         _abi.kv_tables.insert(t);
       }
 
       void add_clauses( const std::vector<std::pair<std::string, std::string>>& clauses ) {
@@ -356,6 +416,21 @@ namespace eosio { namespace cdt {
          return o;
       }
 
+      ojson kv_table_to_json( const abi_kv_table& t ) {
+         ojson o;
+         o["name"] = t.name;
+         o["type"] = t.type;
+         auto indices = ojson::array();
+         for (const auto& i : t.indices) {
+            ojson o;
+            o["name"] = i.name;
+            o["type"] = i.type;
+            indices.push_back(o);
+         }
+         o["indices"] = indices;
+         return o;
+      }
+
       ojson action_result_to_json( const abi_action_result& result ) {
          ojson o;
          o["name"] = result.name;
@@ -447,6 +522,10 @@ namespace eosio { namespace cdt {
                if (as.name == _translate_type(t.type))
                   return true;
             }
+            for ( const auto t : _abi.kv_tables ) {
+               if (as.name == _translate_type(t.type))
+                  return true;
+            }
             for( auto td : _abi.typedefs ) {
                if (as.name == _translate_type(remove_suffix(td.type)))
                   return true;
@@ -491,7 +570,8 @@ namespace eosio { namespace cdt {
          };
 
          for ( auto s : _abi.structs ) {
-            if (validate_struct(s))
+            const auto res = validate_struct(s);
+            if (res)
                o["structs"].push_back(struct_to_json(s));
          }
          o["types"]       = ojson::array();
@@ -506,6 +586,10 @@ namespace eosio { namespace cdt {
          o["tables"]     = ojson::array();
          for ( auto t : set_of_tables ) {
             o["tables"].push_back(table_to_json( t ));
+         }
+         o["kv_tables"]  = ojson::array();
+         for ( const auto& t : _abi.kv_tables ) {
+            o["kv_tables"].push_back(kv_table_to_json( t ));
          }
          o["ricardian_clauses"]  = ojson::array();
          for ( auto rc : _abi.ricardian_clauses ) {
@@ -531,6 +615,56 @@ namespace eosio { namespace cdt {
          std::set<abi_table>                   ctables;
          std::map<std::string, std::string>    rcs;
          std::set<const clang::Type*>          evaluated;
+
+         bool is_kv_table(const clang::CXXRecordDecl* decl) {
+            for (const auto& base : decl->bases()) {
+               auto type = base.getType();
+               if (type.getAsString().find("eosio::kv_table<") != std::string::npos) {
+                  return true;
+               }
+            }
+
+            return false;
+         }
+
+         std::string get_value_from_decltype(const clang::DecltypeType* decl) {
+            if (const auto ref_type = dyn_cast<clang::LValueReferenceType>(decl->desugar())) {
+               const auto pt = ref_type->getPointeeType();
+               if (const auto record_type = dyn_cast<clang::RecordType>(pt)) {
+                  const auto gdt = record_type->getDecl();
+                  if (const auto ctsd = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
+                     const auto& template_args = ctsd->getTemplateArgs();
+                     // Handle tuples, which have the template arguments treated as a pack
+                     if (template_args.size() == 1 && template_args[0].pack_size() > 1) {
+                        std::string ret = ctsd->getName().str();
+                        for (const auto& pack_elem : template_args[0].getPackAsArray()) {
+                           ret += "_";
+                           ret += get_type(pack_elem.getAsType());
+                        }
+                        return ret;
+                     } else {
+                        // Handle non-tuple templates
+                        return get_type(record_type->desugar());
+                     }
+                  } else {
+                     // Handle non-template records
+                     return get_type(record_type->desugar());
+                  }
+               } else {
+                  // Handle non-records
+                  return get_type(pt);
+               }
+            }
+            CDT_INTERNAL_ERROR("Error generating type from kv index definition");
+            return "";
+         }
+
+         const std::set<std::string> internal_types {
+            "kv_table",
+            "kv_table_base",
+            "index",
+            "kv_index"
+         };
    };
 
    class eosio_abigen_visitor : public RecursiveASTVisitor<eosio_abigen_visitor>, public generation_utils {
@@ -543,13 +677,18 @@ namespace eosio { namespace cdt {
             get_error_emitter().set_compiler_instance(CI);
          }
 
+         bool shouldVisitTemplateInstantiations() const {
+            return true;
+         }
+
          virtual bool VisitCXXMethodDecl(clang::CXXMethodDecl* decl) {
             if (!has_added_clauses) {
                ag.add_clauses(parse_clauses());
                ag.add_contracts(parse_contracts());
                has_added_clauses = true;
             }
-            if (decl->isEosioAction() && abigen::is_eosio_contract(decl, get_contract_name())) {
+
+            if (decl->isEosioAction() && ag.is_eosio_contract(decl, ag.get_contract_name())) {
                ag.add_struct(decl);
                ag.add_action(decl);
                for (auto param : decl->parameters()) {
@@ -564,7 +703,7 @@ namespace eosio { namespace cdt {
                ag.add_contracts(parse_contracts());
                has_added_clauses = true;
             }
-            if ((decl->isEosioAction() || decl->isEosioTable()) && abigen::is_eosio_contract(decl, get_contract_name())) {
+            if ((decl->isEosioAction() || decl->isEosioTable()) && ag.is_eosio_contract(decl, ag.get_contract_name())) {
                ag.add_struct(decl);
                if (decl->isEosioAction())
                   ag.add_action(decl);
@@ -617,10 +756,9 @@ namespace eosio { namespace cdt {
                */
             }
          }
+   };
 
-      };
-
-      class eosio_abigen_frontend_action : public ASTFrontendAction {
+   class eosio_abigen_frontend_action : public ASTFrontendAction {
       public:
          virtual std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file) {
             CI.getPreprocessor().addPPCallbacks(std::make_unique<eosio_ppcallbacks>(CI.getSourceManager(), file.str()));

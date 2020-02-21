@@ -413,6 +413,8 @@ struct generation_utils {
          {"unsigned_int", "varuint32"},
          {"signed_int",   "varint32"},
 
+         {"basic_string<char>", "string"},
+
          {"block_timestamp", "block_timestamp_type"},
          {"capi_name",    "name"},
          {"capi_public_key", "public_key"},
