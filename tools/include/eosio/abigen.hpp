@@ -177,6 +177,16 @@ namespace eosio { namespace cdt {
       }
 
       void add_struct( const clang::CXXRecordDecl* decl, const std::string& rname="" ) {
+         auto nme = decl->getName().str();
+         if (internal_types.count(nme)) {
+            // std::cout << "skipping this type as it is internal: " << nme << std::endl;
+            return;
+         }
+
+         std::cout << "add_struct_record: " << nme << std::endl;
+
+         is_kv_table(decl);
+
          abi_struct ret;
          if ( decl->getNumBases() == 1 ) {
             ret.base = get_type(decl->bases_begin()->getType());
@@ -204,6 +214,7 @@ namespace eosio { namespace cdt {
       }
 
       void add_struct( const clang::CXXMethodDecl* decl ) {
+         std::cout << "add_struct_method: " << decl->getName().str() << std::endl;
          abi_struct new_struct;
          new_struct.name = decl->getNameAsString();
          for (auto param : decl->parameters() ) {
@@ -219,6 +230,8 @@ namespace eosio { namespace cdt {
       }
 
       void add_table( const clang::CXXRecordDecl* decl ) {
+         if (is_kv_table(decl)) return;
+
          tables.insert(decl);
          abi_table t;
          t.type = decl->getNameAsString();
@@ -233,15 +246,18 @@ namespace eosio { namespace cdt {
          else {
             t.name = t.type;
          }
+         std::cout << "Add table record: " << t.name << std::endl;
          ctables.insert(t);
       }
 
       void add_table( uint64_t name, const clang::CXXRecordDecl* decl ) {
          if (!(decl->isEosioTable() && abigen::is_eosio_contract(decl, get_contract_name())))
             return;
+
          abi_table t;
          t.type = decl->getNameAsString();
          t.name = name_to_string(name);
+         std::cout << "Add table name: " << t.name << std::endl;
          _abi.tables.insert(t);
       }
 
@@ -532,5 +548,28 @@ namespace eosio { namespace cdt {
          std::set<abi_table>                   ctables;
          std::map<std::string, std::string>    rcs;
          std::set<const clang::Type*>          evaluated;
+
+         bool is_kv_table(const clang::CXXRecordDecl* decl) {
+            for (const auto& base : decl->bases()) {
+               auto type = base.getType();
+
+               auto doesthiswork = type->getAsCXXRecordDecl();
+               std::cout << doesthiswork->getNameAsString() << " : " << doesthiswork->isTemplated() << std::endl;
+
+               if (type.getAsString().find("eosio::kv_table<") != std::string::npos) {
+                  std::cout << "This is a kv table!" << std::endl;
+                  return true;
+               }
+            }
+
+            return false;
+         }
+
+         const std::set<std::string> internal_types {
+            "kv_table",
+            "kv_table_base",
+            "index",
+            "kv_index"
+         };
    };
 }} // ns eosio::cdt
