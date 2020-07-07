@@ -103,6 +103,13 @@ namespace eosio { namespace cdt {
                   get_abigen_ref().add_table(decl->getTemplateArgs()[0].getAsIntegral().getExtValue(),
                                           (clang::CXXRecordDecl*)((clang::RecordType*)decl->getTemplateArgs()[1].getAsType().getTypePtr())->getDecl());
                }
+
+               if (decl->getName() == "kv_table") {
+                  // const auto& t = decl->getTemplateArgs()[0];
+                  // const auto* type_ptr = t.getAsType().getTypePtr();
+                  // get_abigen_ref().add_kv_table(type_ptr->getAsCXXRecordDecl());
+                  get_abigen_ref().add_kv_struct(decl);
+               }
             }
          }
    };

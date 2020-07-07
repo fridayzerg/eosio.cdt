@@ -1,10 +1,5 @@
 #include <eosio/eosio.hpp>
 
-class [[eosio::contract]] kv_variant_tests : public eosio::contract {
-public:
-
-   using contract::contract;
-
    struct my_struct_v {
       uint64_t age;
       std::string full_name;
@@ -16,7 +11,7 @@ public:
       uint64_t age;
    };
 
-   struct [[eosio::table]] my_table : eosio::kv_table<my_struct_v> {
+   struct my_table : eosio::kv_table<my_struct_v> {
       KV_NAMED_INDEX("fullname"_n, full_name);
       KV_NAMED_INDEX("age"_n, age);
 
@@ -25,7 +20,7 @@ public:
       }
    };
 
-   struct [[eosio::table]] my_table_v : eosio::kv_table<std::variant<my_struct_v, my_struct_v2>> {
+   struct my_table_v : eosio::kv_table<std::variant<my_struct_v, my_struct_v2>> {
       index<std::string> primary_key{"fullname"_n, [](const auto& obj) {
          return std::visit([&](auto&& a) {
             using V = std::decay_t<decltype(a)>;
@@ -49,6 +44,11 @@ public:
          init(contract_name, "testtable"_n, "eosio.kvram"_n, primary_key, age);
       }
    };
+
+class [[eosio::contract]] kv_variant_tests : public eosio::contract {
+public:
+
+   using contract::contract;
 
    // Empty action to avoid having conditional logic in the integration tests file.
    [[eosio::action]]
