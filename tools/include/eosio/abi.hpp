@@ -48,8 +48,7 @@ struct abi_kv_table {
    std::string name;
    std::string type;
    std::string storage_type;
-   abi_index primary_index;
-   std::vector<abi_index> secondary_indices;
+   std::vector<abi_index> indices;
    bool operator<(const abi_kv_table& t) const { return name < t.name; }
 };
 

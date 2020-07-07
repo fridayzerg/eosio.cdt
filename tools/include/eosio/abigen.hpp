@@ -185,14 +185,16 @@ namespace eosio { namespace cdt {
 
          std::cout << "add_struct_record: " << nme << std::endl;
 
-         is_kv_table(decl);
+         // is_kv_table(decl);
 
          abi_struct ret;
          if ( decl->getNumBases() == 1 ) {
             ret.base = get_type(decl->bases_begin()->getType());
             add_type(decl->bases_begin()->getType());
          }
+         std::cout << "Fields: ";
          for ( auto field : decl->fields() ) {
+            std::cout << field->getNameAsString() << "\t";
             if ( field->getName() == "transaction_extensions") {
                abi_struct ext;
                ext.name = "extension";
@@ -206,11 +208,15 @@ namespace eosio { namespace cdt {
                add_type(field->getType());
             }
          }
+         std::cout << std::endl;
          if (!rname.empty())
             ret.name = rname;
          else
             ret.name = decl->getName().str();
-         _abi.structs.insert(ret);
+
+         std::cout << ret.name << " " << ret.fields.size() << std::endl;
+         const auto res = _abi.structs.insert(ret);
+         std::cout << "was successfully inserted: " << res.second;
       }
 
       void add_struct( const clang::CXXMethodDecl* decl ) {
@@ -230,7 +236,10 @@ namespace eosio { namespace cdt {
       }
 
       void add_table( const clang::CXXRecordDecl* decl ) {
-         if (is_kv_table(decl)) return;
+         if (is_kv_table(decl)) {
+            add_kv_table(decl);
+            return;
+         }
 
          tables.insert(decl);
          abi_table t;
@@ -259,6 +268,50 @@ namespace eosio { namespace cdt {
          t.name = name_to_string(name);
          std::cout << "Add table name: " << t.name << std::endl;
          _abi.tables.insert(t);
+      }
+
+      void add_kv_struct(const clang::ClassTemplateSpecializationDecl* decl) {
+         const auto& table_template = decl->getTemplateArgs()[0];
+         const auto* table_ptr = table_template.getAsType().getTypePtr()->getAsCXXRecordDecl();
+         add_struct(table_ptr);
+      }
+
+      void add_kv_table(const clang::CXXRecordDecl* const decl) {
+         std::cerr << "add_kv_table: " << decl->getNameAsString() << std::endl;
+         decl->dump();
+
+         std::cerr << "Bases: ";
+         for (const auto& base : decl->bases()) {
+            const auto* b = (clang::ClassTemplateSpecializationDecl*)(base.getType()->getAsCXXRecordDecl());
+            std::cerr << base.getType()->getAsCXXRecordDecl()->getNameAsString() << std::endl;
+            // b->dump();
+            if (b) {
+               const auto& t = b->getTemplateArgs()[0];
+               const auto* type_ptr = t.getAsType().getTypePtr();
+               const auto* table_type = type_ptr->getAsCXXRecordDecl();
+               std::cerr << type_ptr->getAsCXXRecordDecl()->getNameAsString() << std::endl;
+               for (const auto* field : table_type->fields()) {
+                  std::cerr << field->getNameAsString() << std::endl;
+               }
+            }
+         }
+
+
+         // const auto pu2 = decl->TemplateOrInstantiation;
+
+         // Debug =========================================
+         // const auto& k = decl->getInstantiatedFrom();
+         // k.get<clang::ClassTemplateDecl*>()->dump();
+         // table_ptr->dump();
+         // ===============================================
+
+         abi_kv_table t;
+         // t.type = table_type_ptr->getNameAsString();
+         // TODO:
+         // name
+         // storage type
+         // indices
+         // _abi.kv_tables.insert(t);
       }
 
       void add_clauses( const std::vector<std::pair<std::string, std::string>>& clauses ) {
@@ -440,8 +493,11 @@ namespace eosio { namespace cdt {
          };
 
          auto validate_struct = [&]( abi_struct as ) {
-            if ( is_builtin_type(_translate_type(as.name)) )
+            std::cout << "validate struct: " << as.name << std::endl;
+            if ( is_builtin_type(_translate_type(as.name)) ) {
+               std::cout << "this is a builtin type" << std::endl;
                return false;
+            }
             for ( auto s : _abi.structs ) {
                for ( auto f : s.fields ) {
                   if (as.name == _translate_type(remove_suffix(f.type)))
@@ -461,6 +517,10 @@ namespace eosio { namespace cdt {
                   return true;
             }
             for( auto t : set_of_tables ) {
+               if (as.name == _translate_type(t.type))
+                  return true;
+            }
+            for ( const auto t : _abi.kv_tables ) {
                if (as.name == _translate_type(t.type))
                   return true;
             }
@@ -508,7 +568,9 @@ namespace eosio { namespace cdt {
          };
 
          for ( auto s : _abi.structs ) {
-            if (validate_struct(s))
+            const auto res = validate_struct(s);
+            std::cout << "was validated: " << res << std::endl;
+            if (res)
                o["structs"].push_back(struct_to_json(s));
          }
          o["types"]       = ojson::array();

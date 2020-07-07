@@ -25,9 +25,6 @@ else()
    endif()
 endif()
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS true)
-
-
 set(VERSION_MAJOR 1)
 set(VERSION_MINOR 7)
 set(VERSION_PATCH 0)
