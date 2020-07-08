@@ -277,39 +277,21 @@ namespace eosio { namespace cdt {
       }
 
       void add_kv_table(const clang::CXXRecordDecl* const decl) {
+         clang::CXXRecordDecl* table_type;
          std::cerr << "add_kv_table: " << decl->getNameAsString() << std::endl;
-         decl->dump();
 
-         std::cerr << "Bases: ";
          for (const auto& base : decl->bases()) {
-            const auto* b = (clang::ClassTemplateSpecializationDecl*)(base.getType()->getAsCXXRecordDecl());
-            std::cerr << base.getType()->getAsCXXRecordDecl()->getNameAsString() << std::endl;
-            // b->dump();
-            if (b) {
-               const auto& t = b->getTemplateArgs()[0];
-               const auto* type_ptr = t.getAsType().getTypePtr();
-               const auto* table_type = type_ptr->getAsCXXRecordDecl();
-               std::cerr << type_ptr->getAsCXXRecordDecl()->getNameAsString() << std::endl;
-               for (const auto* field : table_type->fields()) {
-                  std::cerr << field->getNameAsString() << std::endl;
-               }
+            if (const auto* templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
+               const auto& templ = templ_base->getTemplateArgs()[0];
+               table_type = templ.getAsType().getTypePtr()->getAsCXXRecordDecl();
+               add_struct(table_type);
             }
          }
 
-
-         // const auto pu2 = decl->TemplateOrInstantiation;
-
-         // Debug =========================================
-         // const auto& k = decl->getInstantiatedFrom();
-         // k.get<clang::ClassTemplateDecl*>()->dump();
-         // table_ptr->dump();
-         // ===============================================
-
          abi_kv_table t;
-         // t.type = table_type_ptr->getNameAsString();
+         t.type = table_type->getNameAsString();
          // TODO:
          // name
-         // storage type
          // indices
          // _abi.kv_tables.insert(t);
       }
