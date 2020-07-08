@@ -185,7 +185,7 @@ namespace eosio { namespace cdt {
 
          std::cout << "add_struct_record: " << nme << std::endl;
 
-         // is_kv_table(decl);
+         if (is_kv_table(decl)) return;
 
          abi_struct ret;
          if ( decl->getNumBases() == 1 ) {
@@ -216,7 +216,7 @@ namespace eosio { namespace cdt {
 
          std::cout << ret.name << " " << ret.fields.size() << std::endl;
          const auto res = _abi.structs.insert(ret);
-         std::cout << "was successfully inserted: " << res.second;
+         std::cout << "was successfully inserted: " << res.second << std::endl;
       }
 
       void add_struct( const clang::CXXMethodDecl* decl ) {
@@ -271,29 +271,37 @@ namespace eosio { namespace cdt {
       }
 
       void add_kv_struct(const clang::ClassTemplateSpecializationDecl* decl) {
+         #if 0
          const auto& table_template = decl->getTemplateArgs()[0];
          const auto* table_ptr = table_template.getAsType().getTypePtr()->getAsCXXRecordDecl();
          add_struct(table_ptr);
+         #endif
       }
 
       void add_kv_table(const clang::CXXRecordDecl* const decl) {
          clang::CXXRecordDecl* table_type;
+         std::string templ_name;
+
          std::cerr << "add_kv_table: " << decl->getNameAsString() << std::endl;
 
          for (const auto& base : decl->bases()) {
             if (const auto* templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
-               const auto& templ = templ_base->getTemplateArgs()[0];
-               table_type = templ.getAsType().getTypePtr()->getAsCXXRecordDecl();
+               const auto& templ_type = templ_base->getTemplateArgs()[0];
+               table_type = templ_type.getAsType().getTypePtr()->getAsCXXRecordDecl();
                add_struct(table_type);
+
+               std::cerr << "num templs: " << templ_base->getTemplateArgs().size() << std::endl;
+               const auto templ_val = templ_base->getTemplateArgs()[1].getAsIntegral().getExtValue();
+               templ_name = name_to_string(templ_val);
             }
          }
 
          abi_kv_table t;
          t.type = table_type->getNameAsString();
+         t.name = templ_name;
          // TODO:
-         // name
          // indices
-         // _abi.kv_tables.insert(t);
+         _abi.kv_tables.insert(t);
       }
 
       void add_clauses( const std::vector<std::pair<std::string, std::string>>& clauses ) {
@@ -405,6 +413,13 @@ namespace eosio { namespace cdt {
          o["index_type"] = "i64";
          o["key_names"] = ojson::array();
          o["key_types"] = ojson::array();
+         return o;
+      }
+
+      ojson kv_table_to_json( const abi_kv_table& t ) {
+         ojson o;
+         o["name"] = t.name;
+         o["type"] = t.type;
          return o;
       }
 
@@ -568,6 +583,11 @@ namespace eosio { namespace cdt {
          for ( auto t : set_of_tables ) {
             o["tables"].push_back(table_to_json( t ));
          }
+         o["kv_tables"]  = ojson::array();
+         for ( const auto& t : _abi.kv_tables ) {
+            std::cerr << "write kv table" << std::endl;
+            o["kv_tables"].push_back(kv_table_to_json( t ));
+         }
          o["ricardian_clauses"]  = ojson::array();
          for ( auto rc : _abi.ricardian_clauses ) {
             o["ricardian_clauses"].push_back(clause_to_json( rc ));
@@ -594,6 +614,7 @@ namespace eosio { namespace cdt {
          std::set<const clang::Type*>          evaluated;
 
          bool is_kv_table(const clang::CXXRecordDecl* decl) {
+            std::cout << "Check is kv table" << std::endl;
             for (const auto& base : decl->bases()) {
                auto type = base.getType();
 
