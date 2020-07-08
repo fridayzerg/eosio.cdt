@@ -159,6 +159,7 @@ void generate(const std::vector<std::string>& base_options, std::string input, s
    if (!get_abigen_ref().is_empty()) {
       std::string abi_s;
       get_abigen_ref().to_json().dump(abi_s);
+      std::cerr << abi_s << std::endl;
       codegen::get().set_abi(abi_s);
    }
 
