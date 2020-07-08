@@ -21,14 +21,14 @@ public:
       }
    };
 
-   struct [[eosio::table]] my_table : eosio::kv_table<my_struct> {
+   struct [[eosio::table]] my_table : eosio::kv_table<my_struct, "testtable"_n> {
       KV_NAMED_INDEX("primarykey"_n, primary_key)
       KV_NAMED_INDEX("foo"_n, foo)
       KV_NAMED_INDEX("bar"_n, bar)
       KV_NAMED_INDEX("nonuniqnme"_n, non_unique_name)
 
       my_table(eosio::name contract_name) {
-         init(contract_name, "testtable"_n, "eosio.kvram"_n, primary_key, foo, bar, non_unique_name);
+         init(contract_name, primary_key, foo, bar, non_unique_name);
       }
    };
 
