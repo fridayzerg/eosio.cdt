@@ -179,11 +179,8 @@ namespace eosio { namespace cdt {
       void add_struct( const clang::CXXRecordDecl* decl, const std::string& rname="" ) {
          auto nme = decl->getName().str();
          if (internal_types.count(nme)) {
-            // std::cout << "skipping this type as it is internal: " << nme << std::endl;
             return;
          }
-
-         std::cout << "add_struct_record: " << nme << std::endl;
 
          if (is_kv_table(decl)) return;
 
@@ -192,9 +189,7 @@ namespace eosio { namespace cdt {
             ret.base = get_type(decl->bases_begin()->getType());
             add_type(decl->bases_begin()->getType());
          }
-         std::cout << "Fields: ";
          for ( auto field : decl->fields() ) {
-            std::cout << field->getNameAsString() << "\t";
             if ( field->getName() == "transaction_extensions") {
                abi_struct ext;
                ext.name = "extension";
@@ -208,19 +203,15 @@ namespace eosio { namespace cdt {
                add_type(field->getType());
             }
          }
-         std::cout << std::endl;
          if (!rname.empty())
             ret.name = rname;
          else
             ret.name = decl->getName().str();
 
-         std::cout << ret.name << " " << ret.fields.size() << std::endl;
          const auto res = _abi.structs.insert(ret);
-         std::cout << "was successfully inserted: " << res.second << std::endl;
       }
 
       void add_struct( const clang::CXXMethodDecl* decl ) {
-         std::cout << "add_struct_method: " << decl->getName().str() << std::endl;
          abi_struct new_struct;
          new_struct.name = decl->getNameAsString();
          for (auto param : decl->parameters() ) {
@@ -255,7 +246,6 @@ namespace eosio { namespace cdt {
          else {
             t.name = t.type;
          }
-         std::cout << "Add table record: " << t.name << std::endl;
          ctables.insert(t);
       }
 
@@ -266,41 +256,35 @@ namespace eosio { namespace cdt {
          abi_table t;
          t.type = decl->getNameAsString();
          t.name = name_to_string(name);
-         std::cout << "Add table name: " << t.name << std::endl;
          _abi.tables.insert(t);
-      }
-
-      void add_kv_struct(const clang::ClassTemplateSpecializationDecl* decl) {
-         #if 0
-         const auto& table_template = decl->getTemplateArgs()[0];
-         const auto* table_ptr = table_template.getAsType().getTypePtr()->getAsCXXRecordDecl();
-         add_struct(table_ptr);
-         #endif
       }
 
       void add_kv_table(const clang::CXXRecordDecl* const decl) {
          clang::CXXRecordDecl* table_type;
          std::string templ_name;
 
-         std::cerr << "add_kv_table: " << decl->getNameAsString() << std::endl;
-
          for (const auto& base : decl->bases()) {
-            if (const auto* templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
+            if (const auto templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
                const auto& templ_type = templ_base->getTemplateArgs()[0];
                table_type = templ_type.getAsType().getTypePtr()->getAsCXXRecordDecl();
                add_struct(table_type);
 
-               std::cerr << "num templs: " << templ_base->getTemplateArgs().size() << std::endl;
                const auto templ_val = templ_base->getTemplateArgs()[1].getAsIntegral().getExtValue();
                templ_name = name_to_string(templ_val);
             }
          }
 
+
          abi_kv_table t;
          t.type = table_type->getNameAsString();
          t.name = templ_name;
-         // TODO:
-         // indices
+
+         for (const auto field : decl->fields()) {
+            field->getType()->dump();
+            t.indices.push_back({field->getNameAsString(), ""});
+            // TODO: Type
+         }
+
          _abi.kv_tables.insert(t);
       }
 
@@ -420,6 +404,14 @@ namespace eosio { namespace cdt {
          ojson o;
          o["name"] = t.name;
          o["type"] = t.type;
+         auto indices = ojson::array();
+         for (const auto& i : t.indices) {
+            ojson o;
+            o["name"] = i.name;
+            o["type"] = i.type;
+            indices.push_back(o);
+         }
+         o["indices"] = indices;
          return o;
       }
 
@@ -490,11 +482,8 @@ namespace eosio { namespace cdt {
          };
 
          auto validate_struct = [&]( abi_struct as ) {
-            std::cout << "validate struct: " << as.name << std::endl;
-            if ( is_builtin_type(_translate_type(as.name)) ) {
-               std::cout << "this is a builtin type" << std::endl;
+            if ( is_builtin_type(_translate_type(as.name)) )
                return false;
-            }
             for ( auto s : _abi.structs ) {
                for ( auto f : s.fields ) {
                   if (as.name == _translate_type(remove_suffix(f.type)))
@@ -566,7 +555,6 @@ namespace eosio { namespace cdt {
 
          for ( auto s : _abi.structs ) {
             const auto res = validate_struct(s);
-            std::cout << "was validated: " << res << std::endl;
             if (res)
                o["structs"].push_back(struct_to_json(s));
          }
@@ -585,7 +573,6 @@ namespace eosio { namespace cdt {
          }
          o["kv_tables"]  = ojson::array();
          for ( const auto& t : _abi.kv_tables ) {
-            std::cerr << "write kv table" << std::endl;
             o["kv_tables"].push_back(kv_table_to_json( t ));
          }
          o["ricardian_clauses"]  = ojson::array();
@@ -614,15 +601,9 @@ namespace eosio { namespace cdt {
          std::set<const clang::Type*>          evaluated;
 
          bool is_kv_table(const clang::CXXRecordDecl* decl) {
-            std::cout << "Check is kv table" << std::endl;
             for (const auto& base : decl->bases()) {
                auto type = base.getType();
-
-               auto doesthiswork = type->getAsCXXRecordDecl();
-               std::cout << doesthiswork->getNameAsString() << " : " << doesthiswork->isTemplated() << std::endl;
-
                if (type.getAsString().find("eosio::kv_table<") != std::string::npos) {
-                  std::cout << "This is a kv table!" << std::endl;
                   return true;
                }
             }

@@ -39,7 +39,7 @@ struct abi_table {
    bool operator<(const abi_table& t) const { return name < t.name; }
 };
 
-struct abi_index {
+struct abi_kv_index {
    std::string name;
    std::string type;
 };
@@ -47,7 +47,7 @@ struct abi_index {
 struct abi_kv_table {
    std::string name;
    std::string type;
-   std::vector<abi_index> indices;
+   std::vector<abi_kv_index> indices;
    bool operator<(const abi_kv_table& t) const { return name < t.name; }
 };
 

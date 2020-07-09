@@ -103,13 +103,6 @@ namespace eosio { namespace cdt {
                   get_abigen_ref().add_table(decl->getTemplateArgs()[0].getAsIntegral().getExtValue(),
                                           (clang::CXXRecordDecl*)((clang::RecordType*)decl->getTemplateArgs()[1].getAsType().getTypePtr())->getDecl());
                }
-
-               if (decl->getName() == "kv_table") {
-                  // const auto& t = decl->getTemplateArgs()[0];
-                  // const auto* type_ptr = t.getAsType().getTypePtr();
-                  // get_abigen_ref().add_kv_table(type_ptr->getAsCXXRecordDecl());
-                  get_abigen_ref().add_kv_struct(decl);
-               }
             }
          }
    };
@@ -159,7 +152,6 @@ void generate(const std::vector<std::string>& base_options, std::string input, s
    if (!get_abigen_ref().is_empty()) {
       std::string abi_s;
       get_abigen_ref().to_json().dump(abi_s);
-      std::cerr << abi_s << std::endl;
       codegen::get().set_abi(abi_s);
    }
 
