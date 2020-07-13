@@ -410,6 +410,8 @@ struct generation_utils {
          {"unsigned_int", "varuint32"},
          {"signed_int",   "varint32"},
 
+         {"basic_string<char>", "string"},
+
          {"block_timestamp", "block_timestamp_type"},
          {"capi_name",    "name"},
          {"capi_public_key", "public_key"},
@@ -421,6 +423,8 @@ struct generation_utils {
          {"fixed_bytes_32", "checksum256"},
          {"fixed_bytes_64", "checksum512"}
       };
+
+      // std::cerr << "_translate_type: " << t << std::endl;
       
       auto ret = translation_table[t];
 

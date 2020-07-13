@@ -54,6 +54,67 @@ namespace eosio { namespace cdt {
       static abigen ag;
       return ag;
    }
+   class FindIndexTypeVisitor : public RecursiveASTVisitor<FindIndexTypeVisitor> {
+   public:
+     bool shouldVisitTemplateInstantiations() { 
+        return true;
+     }
+     bool VisitCXXRecordDecl(CXXRecordDecl *decl) {
+         // For debugging, dumping the AST nodes will show which nodes are already
+         // being visited.
+
+         /*
+         if (Declaration->isEosioTable()) {
+            std::cerr << "====== MY VISITOR ======" << std::endl;
+            Declaration->dump();
+         }
+         */
+
+         if (!decl->isEosioTable()) {
+            return true;
+         }
+
+         for (const auto& base : decl->bases()) {
+            auto type = base.getType();
+            if (type.getAsString().find("eosio::kv_table<") == std::string::npos) {
+               return true;
+            }
+         }
+
+         for (const auto field : decl->fields()) {
+            // field->dump();
+         }
+
+         // The return value indicates whether we want the visitation to proceed.
+         // Return false to stop the traversal of the AST.
+         return true;
+      }
+
+      bool VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *decl) {
+         if (decl->getNameAsString() == "index") {
+            get_abigen_ref().add_kv_index(decl);
+         }
+         return true;
+      }
+   };
+   class FindIndexTypeConsumer : public clang::ASTConsumer {
+   public:
+      virtual void HandleTranslationUnit(clang::ASTContext &Context) {
+         // Traversing the translation unit decl via a RecursiveASTVisitor
+         // will visit all nodes in the AST.
+         Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+      }
+
+   private:
+      // A RecursiveASTVisitor implementation.
+      FindIndexTypeVisitor Visitor;
+   };
+   class FindIndexTypeAction : public clang::ASTFrontendAction {
+   public:
+      virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance &Compiler, llvm::StringRef InFile) {
+        return std::unique_ptr<clang::ASTConsumer>(new FindIndexTypeConsumer);
+      }
+   };
 
    class EosioMethodMatcher : public MatchFinder::MatchCallback {
       public:
@@ -103,6 +164,21 @@ namespace eosio { namespace cdt {
                   get_abigen_ref().add_table(decl->getTemplateArgs()[0].getAsIntegral().getExtValue(),
                                           (clang::CXXRecordDecl*)((clang::RecordType*)decl->getTemplateArgs()[1].getAsType().getTypePtr())->getDecl());
                }
+
+               if ( decl->getName() == "index" ) {
+                  // decl->dump();
+                  get_abigen_ref().add_kv_index(decl);
+               }
+
+               if ( decl->getName() == "decay" ) {
+                  const auto templ_arg = decl->getTemplateArgs()[0].getAsType();
+                  #if 0
+                  std::cout << "=== " << templ_arg.getAsString() << std::endl;
+                  decl->dump();
+                  #endif
+               }
+               
+               // std::cout << decl->getNameAsString() << std::endl;
             }
          }
    };
@@ -142,6 +218,8 @@ void generate(const std::vector<std::string>& base_options, std::string input, s
    finder.addMatcher(function_decl_matcher, &eosio_method_matcher);
    finder.addMatcher(record_decl_matcher, &eosio_record_matcher);
    finder.addMatcher(class_tmp_matcher, &eosio_record_matcher);
+
+   ctool.run(newFrontendActionFactory<FindIndexTypeAction>().get());
 
    int tool_run = -1;
    tool_run = ctool.run(newFrontendActionFactory(&finder).get());

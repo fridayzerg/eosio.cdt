@@ -21,6 +21,8 @@ using namespace eosio::cdt;
 using jsoncons::json;
 using jsoncons::ojson;
 
+#define DO_DEBUG false
+
 namespace eosio { namespace cdt {
    struct abigen_exception : public std::exception {
       virtual const char* what() const throw() {
@@ -216,6 +218,7 @@ namespace eosio { namespace cdt {
          new_struct.name = decl->getNameAsString();
          for (auto param : decl->parameters() ) {
             auto param_type = param->getType().getNonReferenceType().getUnqualifiedType();
+            std::cout << param_type.getAsString() << std::endl;
             new_struct.fields.push_back({param->getNameAsString(), get_type(param_type)});
             add_type(param_type);
          }
@@ -259,6 +262,14 @@ namespace eosio { namespace cdt {
          _abi.tables.insert(t);
       }
 
+      void add_kv_index( const clang::ClassTemplateSpecializationDecl* decl ) {
+         std::cout << "kv_index: ";
+         std::cout << get_type(decl->getTemplateArgs()[0].getAsType()) << std::endl;
+         std::cerr << "DUMP: ";
+         decl->getTemplateArgs()[0].getAsType().dump();
+         std::cerr << std::endl;
+      }
+
       void add_kv_table(const clang::CXXRecordDecl* const decl) {
          clang::CXXRecordDecl* table_type;
          std::string templ_name;
@@ -280,9 +291,70 @@ namespace eosio { namespace cdt {
          t.name = templ_name;
 
          for (const auto field : decl->fields()) {
-            field->getType()->dump();
-            t.indices.push_back({field->getNameAsString(), ""});
-            // TODO: Type
+            std::string idx_type{"PLACEHOLDER"};
+
+            const auto qt = field->getType();
+            const auto index_type = get_template_argument(qt);
+            if (const auto elab_type = dyn_cast<clang::ElaboratedType>(index_type.getAsType().getTypePtr())) {
+               // This is the macro case
+               #if DO_DEBUG
+               std::cerr << "This is the macro case: ";
+               #endif
+               const auto decayed_type = elab_type->getNamedType();
+               #if DO_DEBUG
+               elab_type->dump();
+               decayed_type->dump();
+               #endif
+               idx_type = get_type(decayed_type);
+               if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
+               #if DO_DEBUG
+                  d->dump();
+               #endif
+                  const auto tp = d->desugar();
+
+
+
+#if DO_DEBUG
+                  if (const auto fff = dyn_cast<clang::ElaboratedType>(tp.getTypePtr())) {
+                     std::cerr << "ELABTYPE" << std::endl;
+                     fff->dump();
+                  }
+                  if (const auto qwerty = dyn_cast<clang::RecordType>(tp.getTypePtr())) {
+                     std::cerr << "RECORDTYPE" << std::endl;
+                     qwerty->dump();
+                     std::cerr << "FIELDS" << std::endl;
+                     for (const auto fld : qwerty->getDecl()->fields()) {
+                        std::cerr << fld->getNameAsString();
+                     }
+                     std::cerr << "\nFIELDS" << std::endl;
+
+                     if (const auto ooo = dyn_cast<clang::ClassTemplateSpecializationDecl>(qwerty->getDecl())) {
+                        std::cerr << "CLASSTEMPLATESPECIALIZATIONDECL" << std::endl;
+                        std::cerr << ooo->getNameAsString() << std::endl;
+                     }
+                     std::cerr << "RECORDTYPE" << std::endl;
+                  }
+#endif
+
+
+
+
+#if DO_DEBUG
+                  const auto s = get_type(tp.getUnqualifiedType());
+                  std::cerr << s << std::endl;
+                  #endif
+               }
+               #if DO_DEBUG
+               std::cerr << std::endl;
+               #endif
+            } else {
+               // This is the non-macro case
+               #if DO_DEBUG
+               std::cerr << "This is the non-macro case: " << index_type.getAsType().getAsString() << std::endl;
+               #endif
+            }
+
+            t.indices.push_back({field->getNameAsString(), idx_type});
          }
 
          _abi.kv_tables.insert(t);
