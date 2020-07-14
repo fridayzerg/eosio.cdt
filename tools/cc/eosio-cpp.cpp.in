@@ -118,6 +118,7 @@ namespace eosio { namespace cdt {
             }
          }
    };
+*/
 }} // ns eosio::cdt
 
 void generate(const std::vector<std::string>& base_options, std::string input, std::string contract_name, const std::vector<std::string>& resource_paths, const std::pair<int, int>& abi_version, bool abigen, bool suppress_ricardian_warning) {
