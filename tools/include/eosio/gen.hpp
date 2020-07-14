@@ -6,13 +6,14 @@
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Support/raw_ostream.h"
+#include <eosio/utils.hpp>
+#include <eosio/error_emitter.hpp>
 #include <functional>
 #include <vector>
 #include <string>
 #include <map>
 #include <utility>
-#include <regex>
-#include <eosio/utils.hpp>
+//#include <regex>
 
 namespace eosio { namespace cdt {
 
@@ -101,13 +102,17 @@ struct simple_ricardian_tokenizer {
 };
 
 struct generation_utils {
-   std::function<void()> error_handler;
    std::vector<std::string> resource_dirs;
    std::string contract_name;
    bool suppress_ricardian_warnings;
 
-   generation_utils( std::function<void()> err ) : error_handler(err), resource_dirs({"./"}) {}
-   generation_utils( std::function<void()> err, const std::vector<std::string>& paths ) : error_handler(err), resource_dirs(paths) {}
+   generation_utils() : resource_dirs({"./"}) {}
+   generation_utils( const std::vector<std::string>& paths ) : resource_dirs(paths) {}
+
+   static error_emitter& get_error_emitter() {
+      static error_emitter ee;
+      return ee;
+   }
 
    static inline bool is_ignorable( const clang::QualType& type ) {
       auto check = [&](const clang::Type* pt) {
@@ -290,7 +295,6 @@ struct generation_utils {
       return cn == name;
    }
 
-
    inline bool is_template_specialization( const clang::QualType& type, const std::vector<std::string>& names ) {
       auto check = [&](const clang::Type* pt) {
          if (auto tst = llvm::dyn_cast<clang::TemplateSpecializationType>(pt)) {
@@ -323,8 +327,7 @@ struct generation_utils {
             auto arg = tst->getArg(index);
             return arg.getAsType();
          }
-         std::cout << "Internal error, wrong type of template specialization\n";
-         error_handler();
+         CDT_INTERNAL_ERROR("Wrong type of template specialization");
          return tst->getArg(index).getAsType();
       };
       if (auto pt = llvm::dyn_cast<clang::ElaboratedType>(type.getTypePtr()))
@@ -424,8 +427,6 @@ struct generation_utils {
          {"fixed_bytes_64", "checksum512"}
       };
 
-      // std::cerr << "_translate_type: " << t << std::endl;
-      
       auto ret = translation_table[t];
 
       if (ret == "")
@@ -451,7 +452,7 @@ struct generation_utils {
          auto arg = get_template_argument(type,i);
          if (arg.getAsExpr()) {
             auto ce = llvm::dyn_cast<clang::CastExpr>(arg.getAsExpr());
-            if (ce) { 
+            if (ce) {
                auto il = llvm::dyn_cast<clang::IntegerLiteral>(ce->getSubExpr());
                ret += std::to_string(il->getValue().getLimitedValue());
                if ( i < tst->getNumArgs()-1 )
