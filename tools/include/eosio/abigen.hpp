@@ -263,10 +263,11 @@ namespace eosio { namespace cdt {
       }
 
       void add_kv_index( const clang::ClassTemplateSpecializationDecl* decl ) {
+         const auto qt = decl->getTemplateArgs()[0].getAsType();
          std::cout << "kv_index: ";
-         std::cout << get_type(decl->getTemplateArgs()[0].getAsType()) << std::endl;
+         std::cout << get_type(qt) << std::endl;
          std::cerr << "DUMP: ";
-         decl->getTemplateArgs()[0].getAsType().dump();
+         qt.dump();
          std::cerr << std::endl;
       }
 
@@ -292,7 +293,6 @@ namespace eosio { namespace cdt {
 
          for (const auto field : decl->fields()) {
             std::string idx_type{"PLACEHOLDER"};
-
             const auto qt = field->getType();
             const auto index_type = get_template_argument(qt);
             if (const auto elab_type = dyn_cast<clang::ElaboratedType>(index_type.getAsType().getTypePtr())) {
@@ -301,59 +301,17 @@ namespace eosio { namespace cdt {
                std::cerr << "This is the macro case: ";
                #endif
                const auto decayed_type = elab_type->getNamedType();
-               #if DO_DEBUG
-               elab_type->dump();
-               decayed_type->dump();
-               #endif
                idx_type = get_type(decayed_type);
                if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
-               #if DO_DEBUG
-                  d->dump();
-               #endif
                   const auto tp = d->desugar();
-
-
-
-#if DO_DEBUG
-                  if (const auto fff = dyn_cast<clang::ElaboratedType>(tp.getTypePtr())) {
-                     std::cerr << "ELABTYPE" << std::endl;
-                     fff->dump();
-                  }
-                  if (const auto qwerty = dyn_cast<clang::RecordType>(tp.getTypePtr())) {
-                     std::cerr << "RECORDTYPE" << std::endl;
-                     qwerty->dump();
-                     std::cerr << "FIELDS" << std::endl;
-                     for (const auto fld : qwerty->getDecl()->fields()) {
-                        std::cerr << fld->getNameAsString();
-                     }
-                     std::cerr << "\nFIELDS" << std::endl;
-
-                     if (const auto ooo = dyn_cast<clang::ClassTemplateSpecializationDecl>(qwerty->getDecl())) {
-                        std::cerr << "CLASSTEMPLATESPECIALIZATIONDECL" << std::endl;
-                        std::cerr << ooo->getNameAsString() << std::endl;
-                     }
-                     std::cerr << "RECORDTYPE" << std::endl;
-                  }
-#endif
-
-
-
-
-#if DO_DEBUG
-                  const auto s = get_type(tp.getUnqualifiedType());
-                  std::cerr << s << std::endl;
-                  #endif
                }
-               #if DO_DEBUG
-               std::cerr << std::endl;
-               #endif
             } else {
                // This is the non-macro case
                #if DO_DEBUG
                std::cerr << "This is the non-macro case: " << index_type.getAsType().getAsString() << std::endl;
                #endif
+               idx_type = get_type(index_type.getAsType());
             }
-
             t.indices.push_back({field->getNameAsString(), idx_type});
          }
 

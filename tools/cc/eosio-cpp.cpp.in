@@ -81,10 +81,6 @@ namespace eosio { namespace cdt {
             }
          }
 
-         for (const auto field : decl->fields()) {
-            // field->dump();
-         }
-
          // The return value indicates whether we want the visitation to proceed.
          // Return false to stop the traversal of the AST.
          return true;
@@ -93,6 +89,22 @@ namespace eosio { namespace cdt {
       bool VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl *decl) {
          if (decl->getNameAsString() == "index") {
             get_abigen_ref().add_kv_index(decl);
+         }
+
+         if (decl->getNameAsString() == "decay") {
+            std::cout << "decay: ";
+            std::cout << decl->getTemplateArgs()[0].getAsType().getAsString() << std::endl;
+            const auto tt = decl->getTemplateArgs()[0].getAsType().getTypePtr()->getAsCXXRecordDecl();
+            if (const auto templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(tt)) {
+               std::cout << "TEMPL: ";
+               std::cout << templ_base->getTemplateArgs().size() << " . ";
+               std::cout << decl->getTemplateArgs()[0].getAsType().getAsString() << std::endl;
+            }
+            
+            if (decl->getTemplateArgs()[0].getAsType().getAsString().find("my_struct") != std::string::npos) {
+               decl->getTemplateArgs()[0].getAsType().dump();
+            }
+            std::cout << "\n\n";
          }
          return true;
       }
