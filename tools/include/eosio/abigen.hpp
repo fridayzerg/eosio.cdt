@@ -229,6 +229,7 @@ namespace eosio { namespace cdt {
 
       void add_table( const clang::CXXRecordDecl* decl ) {
          if (is_kv_table(decl)) {
+            std::cout << "IS KV TABLE" << std::endl;
             add_kv_table(decl);
             return;
          }
@@ -257,12 +258,14 @@ namespace eosio { namespace cdt {
       }
 
       void add_kv_index( const clang::ClassTemplateSpecializationDecl* decl ) {
+         #if 0
          const auto qt = decl->getTemplateArgs()[0].getAsType();
          std::cout << "kv_index: ";
          std::cout << get_type(qt) << std::endl;
          std::cerr << "DUMP: ";
          qt.dump();
          std::cerr << std::endl;
+         #endif
       }
 
       void add_kv_table(const clang::CXXRecordDecl* const decl) {
@@ -273,13 +276,12 @@ namespace eosio { namespace cdt {
             if (const auto templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
                const auto& templ_type = templ_base->getTemplateArgs()[0];
                table_type = templ_type.getAsType().getTypePtr()->getAsCXXRecordDecl();
-               add_struct(table_type);
+               // TODO: add_struct(table_type);
 
                const auto templ_val = templ_base->getTemplateArgs()[1].getAsIntegral().getExtValue();
                templ_name = name_to_string(templ_val);
             }
          }
-
 
          abi_kv_table t;
          t.type = table_type->getNameAsString();
@@ -291,19 +293,42 @@ namespace eosio { namespace cdt {
             const auto index_type = get_template_argument(qt);
             if (const auto elab_type = dyn_cast<clang::ElaboratedType>(index_type.getAsType().getTypePtr())) {
                // This is the macro case
-               #if DO_DEBUG
-               std::cerr << "This is the macro case: ";
-               #endif
+               std::cerr << "This is the macro case: " << std::endl;
                const auto decayed_type = elab_type->getNamedType();
-               idx_type = get_type(decayed_type);
                if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
-                  const auto tp = d->desugar();
+                  const auto& decl_type = d->getArg(0);
+                  if (const auto dcl_type = dyn_cast<clang::DecltypeType>(decl_type.getAsType())) {
+                     dcl_type->dump();
+                     std::cerr << "DECLTYPETYPE" << std::endl;
+                     dcl_type->desugar().dump();
+                     if (const auto rt = dyn_cast<clang::LValueReferenceType>(dcl_type->desugar())) {
+                        std::cerr << "RT" << std::endl;
+                        rt->desugar().dump();
+                        rt->getPointeeType().dump();
+                        const auto pt = rt->getPointeeType();
+                        if (const auto _rt = dyn_cast<clang::RecordType>(pt)) {
+                           _rt->dump();
+                           const auto gdt = _rt->getDecl();
+                           if (const auto _qt = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
+                              std::cerr << "QT" << std::endl;
+                              if (_qt) {
+                                 std::cerr << _qt->getTemplateArgs().size() << std::endl;
+                              } else {
+                                 std::cerr << "ERROR" << std::endl;
+                              }
+                              for (int i = 0; i < _qt->getTemplateArgs().size(); ++i) {
+                                 _qt->getTemplateArgs()[i].dump();
+                                 std::cerr << std::endl;
+                              }
+                           }
+                        }
+                     }
+                  }
                }
+               std::cerr << "\n\n";
             } else {
                // This is the non-macro case
-               #if DO_DEBUG
                std::cerr << "This is the non-macro case: " << index_type.getAsType().getAsString() << std::endl;
-               #endif
                idx_type = get_type(index_type.getAsType());
             }
             t.indices.push_back({field->getNameAsString(), idx_type});
@@ -652,13 +677,18 @@ namespace eosio { namespace cdt {
             get_error_emitter().set_compiler_instance(CI);
          }
 
+         bool shouldVisitTemplateInstantiations() const {
+            return true;
+         }
+
          virtual bool VisitCXXMethodDecl(clang::CXXMethodDecl* decl) {
             if (!has_added_clauses) {
                ag.add_clauses(parse_clauses());
                ag.add_contracts(parse_contracts());
                has_added_clauses = true;
             }
-            if (decl->isEosioAction() && abigen::is_eosio_contract(decl, get_contract_name())) {
+
+            if (decl->isEosioAction() && ag.is_eosio_contract(decl, ag.get_contract_name())) {
                ag.add_struct(decl);
                ag.add_action(decl);
                for (auto param : decl->parameters()) {
@@ -673,7 +703,7 @@ namespace eosio { namespace cdt {
                ag.add_contracts(parse_contracts());
                has_added_clauses = true;
             }
-            if ((decl->isEosioAction() || decl->isEosioTable()) && abigen::is_eosio_contract(decl, get_contract_name())) {
+            if ((decl->isEosioAction() || decl->isEosioTable()) && ag.is_eosio_contract(decl, ag.get_contract_name())) {
                ag.add_struct(decl);
                if (decl->isEosioAction())
                   ag.add_action(decl);
