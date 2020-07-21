@@ -10,9 +10,7 @@ public:
       std::string fullname;
       uint32_t age;
 
-      std::tuple<uint32_t, std::string, bool> tst;
       eosio::non_unique<std::string, uint32_t> non_unique_name;
-      // std::pair<int, bool> tst2;
 
       bool operator==(const my_struct& b) const {
          return primary_key == b.primary_key &&
@@ -29,11 +27,11 @@ public:
       index<uint64_t> bar{eosio::name{"bar"_n}, &value_type::bar};
       KV_NAMED_INDEX("nonuniqnme"_n, non_unique_name)
       KV_NAMED_INDEX("age"_n, age)
-      KV_NAMED_INDEX("tst"_n, tst)
+      // KV_NAMED_INDEX("tst"_n, tst)
       // KV_NAMED_INDEX("tst2"_n, tst2)
 
       my_table(eosio::name contract_name) {
-         init(contract_name, primary_key, foo, bar, non_unique_name, age, tst);//, tst2);
+         init(contract_name, primary_key, foo, bar, non_unique_name, age);//, tst);//, tst2);
       }
    };
 

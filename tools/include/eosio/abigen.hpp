@@ -276,7 +276,8 @@ namespace eosio { namespace cdt {
             if (const auto templ_base = dyn_cast<clang::ClassTemplateSpecializationDecl>(base.getType()->getAsCXXRecordDecl())) {
                const auto& templ_type = templ_base->getTemplateArgs()[0];
                table_type = templ_type.getAsType().getTypePtr()->getAsCXXRecordDecl();
-               // TODO: add_struct(table_type);
+               // TODO: how to handle non_unique
+               add_struct(table_type);
 
                const auto templ_val = templ_base->getTemplateArgs()[1].getAsIntegral().getExtValue();
                templ_name = name_to_string(templ_val);
@@ -298,31 +299,7 @@ namespace eosio { namespace cdt {
                if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
                   const auto& decl_type = d->getArg(0);
                   if (const auto dcl_type = dyn_cast<clang::DecltypeType>(decl_type.getAsType())) {
-                     dcl_type->dump();
-                     std::cerr << "DECLTYPETYPE" << std::endl;
-                     dcl_type->desugar().dump();
-                     if (const auto rt = dyn_cast<clang::LValueReferenceType>(dcl_type->desugar())) {
-                        std::cerr << "RT" << std::endl;
-                        rt->desugar().dump();
-                        rt->getPointeeType().dump();
-                        const auto pt = rt->getPointeeType();
-                        if (const auto _rt = dyn_cast<clang::RecordType>(pt)) {
-                           _rt->dump();
-                           const auto gdt = _rt->getDecl();
-                           if (const auto _qt = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
-                              std::cerr << "QT" << std::endl;
-                              if (_qt) {
-                                 std::cerr << _qt->getTemplateArgs().size() << std::endl;
-                              } else {
-                                 std::cerr << "ERROR" << std::endl;
-                              }
-                              for (int i = 0; i < _qt->getTemplateArgs().size(); ++i) {
-                                 _qt->getTemplateArgs()[i].dump();
-                                 std::cerr << std::endl;
-                              }
-                           }
-                        }
-                     }
+                     get_value_from_decltype(dcl_type);
                   }
                }
                std::cerr << "\n\n";
@@ -659,6 +636,25 @@ namespace eosio { namespace cdt {
             return false;
          }
 
+         void get_value_from_decltype(const clang::DecltypeType* decl) {
+            decl->dump();
+            if (const auto rt = dyn_cast<clang::LValueReferenceType>(decl->desugar())) {
+               const auto pt = rt->getPointeeType();
+               if (const auto _rt = dyn_cast<clang::RecordType>(pt)) {
+                  const auto gdt = _rt->getDecl();
+                  if (const auto _qt = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
+                     for (int i = 0; i < _qt->getTemplateArgs().size(); ++i) {
+                        const auto& _ta = _qt->getTemplateArgs()[i];
+                        if (_ta.pack_size() > 0 && _qt->getTemplateArgs().size() == 1) {
+                           // Handles tuples
+                           std::cerr << "THIS IS A TUPLE" << std::endl;
+                        }
+                     }
+                  }
+               }
+            }
+         }
+
          const std::set<std::string> internal_types {
             "kv_table",
             "kv_table_base",
@@ -756,10 +752,9 @@ namespace eosio { namespace cdt {
                */
             }
          }
+   };
 
-      };
-
-      class eosio_abigen_frontend_action : public ASTFrontendAction {
+   class eosio_abigen_frontend_action : public ASTFrontendAction {
       public:
          virtual std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file) {
             CI.getPreprocessor().addPPCallbacks(std::make_unique<eosio_ppcallbacks>(CI.getSourceManager(), file.str()));
