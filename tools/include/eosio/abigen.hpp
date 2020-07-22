@@ -229,7 +229,6 @@ namespace eosio { namespace cdt {
 
       void add_table( const clang::CXXRecordDecl* decl ) {
          if (is_kv_table(decl)) {
-            std::cout << "IS KV TABLE" << std::endl;
             add_kv_table(decl);
             return;
          }
