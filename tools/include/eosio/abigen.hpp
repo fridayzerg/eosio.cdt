@@ -299,7 +299,7 @@ namespace eosio { namespace cdt {
                if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
                   const auto& decl_type = d->getArg(0);
                   if (const auto dcl_type = dyn_cast<clang::DecltypeType>(decl_type.getAsType())) {
-                     get_value_from_decltype(dcl_type);
+                     idx_type = get_value_from_decltype(dcl_type);
                   }
                }
                std::cerr << "\n\n";
@@ -636,23 +636,30 @@ namespace eosio { namespace cdt {
             return false;
          }
 
-         void get_value_from_decltype(const clang::DecltypeType* decl) {
+         std::string get_value_from_decltype(const clang::DecltypeType* decl) {
             decl->dump();
-            if (const auto rt = dyn_cast<clang::LValueReferenceType>(decl->desugar())) {
-               const auto pt = rt->getPointeeType();
-               if (const auto _rt = dyn_cast<clang::RecordType>(pt)) {
-                  const auto gdt = _rt->getDecl();
-                  if (const auto _qt = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
-                     for (int i = 0; i < _qt->getTemplateArgs().size(); ++i) {
-                        const auto& _ta = _qt->getTemplateArgs()[i];
-                        if (_ta.pack_size() > 0 && _qt->getTemplateArgs().size() == 1) {
+            std::string ret{"MACRO CASE"};
+            if (const auto ref_type = dyn_cast<clang::LValueReferenceType>(decl->desugar())) {
+               const auto pt = ref_type->getPointeeType();
+               if (const auto record_type = dyn_cast<clang::RecordType>(pt)) {
+                  const auto gdt = record_type->getDecl();
+                  if (const auto ctsd = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
+                     for (int i = 0; i < ctsd->getTemplateArgs().size(); ++i) {
+                        const auto& templ_arg = ctsd->getTemplateArgs()[i];
+                        if (templ_arg.pack_size() > 0 && ctsd->getTemplateArgs().size() == 1) {
                            // Handles tuples
                            std::cerr << "THIS IS A TUPLE" << std::endl;
+                           for (const auto& pack_elem : templ_arg.getPackAsArray()) {
+                              pack_elem.dump();
+                              std::cerr << std::endl;
+                              std::cerr << get_type(pack_elem.getAsType()) << std::endl;
+                           }
                         }
                      }
                   }
                }
             }
+            return ret;
          }
 
          const std::set<std::string> internal_types {

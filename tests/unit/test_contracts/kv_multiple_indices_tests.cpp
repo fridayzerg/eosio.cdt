@@ -27,11 +27,9 @@ public:
       index<uint64_t> bar{eosio::name{"bar"_n}, &value_type::bar};
       KV_NAMED_INDEX("nonuniqnme"_n, non_unique_name)
       KV_NAMED_INDEX("age"_n, age)
-      // KV_NAMED_INDEX("tst"_n, tst)
-      // KV_NAMED_INDEX("tst2"_n, tst2)
 
       my_table(eosio::name contract_name) {
-         init(contract_name, primary_key, foo, bar, non_unique_name, age);//, tst);//, tst2);
+         init(contract_name, primary_key, foo, bar, non_unique_name, age);
       }
    };
 
