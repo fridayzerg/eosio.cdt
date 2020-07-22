@@ -257,17 +257,6 @@ namespace eosio { namespace cdt {
          _abi.tables.insert(t);
       }
 
-      void add_kv_index( const clang::ClassTemplateSpecializationDecl* decl ) {
-         #if 0
-         const auto qt = decl->getTemplateArgs()[0].getAsType();
-         std::cout << "kv_index: ";
-         std::cout << get_type(qt) << std::endl;
-         std::cerr << "DUMP: ";
-         qt.dump();
-         std::cerr << std::endl;
-         #endif
-      }
-
       void add_kv_table(const clang::CXXRecordDecl* const decl) {
          clang::CXXRecordDecl* table_type;
          std::string templ_name;
@@ -289,12 +278,11 @@ namespace eosio { namespace cdt {
          t.name = templ_name;
 
          for (const auto field : decl->fields()) {
-            std::string idx_type{"PLACEHOLDER"};
+            std::string idx_type;
             const auto qt = field->getType();
             const auto index_type = get_template_argument(qt);
             if (const auto elab_type = dyn_cast<clang::ElaboratedType>(index_type.getAsType().getTypePtr())) {
                // This is the macro case
-               std::cerr << "This is the macro case: " << std::endl;
                const auto decayed_type = elab_type->getNamedType();
                if (const auto d = dyn_cast<clang::TemplateSpecializationType>(decayed_type)) {
                   const auto& decl_type = d->getArg(0);
@@ -302,10 +290,8 @@ namespace eosio { namespace cdt {
                      idx_type = get_value_from_decltype(dcl_type);
                   }
                }
-               std::cerr << "\n\n";
             } else {
                // This is the non-macro case
-               std::cerr << "This is the non-macro case: " << index_type.getAsType().getAsString() << std::endl;
                idx_type = get_type(index_type.getAsType());
             }
             t.indices.push_back({field->getNameAsString(), idx_type});
@@ -637,29 +623,35 @@ namespace eosio { namespace cdt {
          }
 
          std::string get_value_from_decltype(const clang::DecltypeType* decl) {
-            decl->dump();
-            std::string ret{"MACRO CASE"};
             if (const auto ref_type = dyn_cast<clang::LValueReferenceType>(decl->desugar())) {
                const auto pt = ref_type->getPointeeType();
                if (const auto record_type = dyn_cast<clang::RecordType>(pt)) {
                   const auto gdt = record_type->getDecl();
                   if (const auto ctsd = dyn_cast<clang::ClassTemplateSpecializationDecl>(gdt)) {
-                     for (int i = 0; i < ctsd->getTemplateArgs().size(); ++i) {
-                        const auto& templ_arg = ctsd->getTemplateArgs()[i];
-                        if (templ_arg.pack_size() > 0 && ctsd->getTemplateArgs().size() == 1) {
-                           // Handles tuples
-                           std::cerr << "THIS IS A TUPLE" << std::endl;
-                           for (const auto& pack_elem : templ_arg.getPackAsArray()) {
-                              pack_elem.dump();
-                              std::cerr << std::endl;
-                              std::cerr << get_type(pack_elem.getAsType()) << std::endl;
-                           }
+                     const auto& template_args = ctsd->getTemplateArgs();
+                     // Handle tuples, which have the template arguments treated as a pack
+                     if (template_args.size() == 1 && template_args[0].pack_size() > 1) {
+                        std::string ret = ctsd->getName().str();
+                        for (const auto& pack_elem : template_args[0].getPackAsArray()) {
+                           ret += "_";
+                           ret += get_type(pack_elem.getAsType());
                         }
+                        return ret;
+                     } else {
+                        // Handle non-tuple templates
+                        return get_type(record_type->desugar());
                      }
+                  } else {
+                     // Handle non-template records
+                     return get_type(record_type->desugar());
                   }
+               } else {
+                  // Handle non-records
+                  return get_type(pt);
                }
             }
-            return ret;
+            CDT_INTERNAL_ERROR("Error generating type from kv index definition");
+            return "";
          }
 
          const std::set<std::string> internal_types {
