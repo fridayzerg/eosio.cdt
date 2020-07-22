@@ -1,5 +1,7 @@
 #include <eosio/eosio.hpp>
 
+class [[eosio::contract]] kv_variant_tests : public eosio::contract {
+public:
    struct my_struct_v {
       uint64_t age;
       std::string full_name;
@@ -16,7 +18,7 @@
       KV_NAMED_INDEX("age"_n, age);
 
       my_table(eosio::name contract_name) {
-         init(contract_name, "testtable"_n, eosio::kv_ram, full_name, age);
+         init(contract_name, full_name, age);
       }
    };
 
@@ -41,12 +43,10 @@
       }};
 
       my_table_v(eosio::name contract_name) {
-         init(contract_name, "testtable"_n, "eosio.kvram"_n, primary_key, age);
+         init(contract_name, primary_key, age);
       }
    };
 
-class [[eosio::contract]] kv_variant_tests : public eosio::contract {
-public:
 
    using contract::contract;
 
