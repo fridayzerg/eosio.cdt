@@ -10,6 +10,13 @@ public:
       std::string fullname;
       uint32_t age;
 
+      std::pair<int, int> a;
+      std::optional<float> b;
+      std::list<double> c;
+      std::vector<int> d;
+      // TODO: std::variant<int, bool, float> e;
+      // TODO: std::vector<bool> e;
+
       eosio::non_unique<std::string, uint32_t> non_unique_name;
 
       bool operator==(const my_struct& b) const {
